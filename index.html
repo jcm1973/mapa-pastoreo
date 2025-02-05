@@ -13,16 +13,25 @@
 <body>
 
     <h2>Gestión de Pastoreo con Leaflet</h2>
+    <input type="file" id="fileInput" accept=".kml,.kmz">
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/togeojson"></script>
     <script>
-        // 1️⃣ Inicializar mapa
-        var map = L.map('map').setView([-34.6, -58.4], 6); // Centrado en Argentina
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        var map = L.map('map').setView([-34.6, -58.4], 6);
 
-        // 2️⃣ Control de dibujo
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: 'OSM'}).addTo(map);
+        var googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {attribution: 'Google'});
+        var bingSat = L.tileLayer('https://ecn.t3.tiles.virtualearth.net/tiles/a{q}.jpeg?g=1', {attribution: 'Bing'});
+
+        L.control.layers({
+            "OpenStreetMap": osm,
+            "Google Satélite": googleSat,
+            "Bing Satélite": bingSat
+        }).addTo(map);
+
         var drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
         var drawControl = new L.Control.Draw({
@@ -31,70 +40,92 @@
         });
         map.addControl(drawControl);
 
-        // 3️⃣ Evento cuando se dibuja un potrero
-        map.on('draw:created', function (event) {
-            var layer = event.layer;
+        function addPopup(layer) {
             var popupContent = `
-                <b>Nuevo Potrero</b><br>
+                <b>Potrero</b><br>
                 Vacas: <input type="number" id="vacas" min="1"><br>
                 Fecha Entrada: <input type="date" id="fechaEntrada"><br>
-                <button onclick="guardarDatos()">Guardar</button>
+                <button onclick="guardarDatos(this, ${layer._leaflet_id})">Guardar</button>
             `;
-
             layer.bindPopup(popupContent).openPopup();
+        }
+
+        map.on('draw:created', function (event) {
+            var layer = event.layer;
             drawnItems.addLayer(layer);
-            
-            // Guardar referencia del layer
-            layer._leaflet_id = new Date().getTime(); // ID único
+            addPopup(layer);
         });
 
-        // 4️⃣ Guardar datos en el popup
-        function guardarDatos() {
-            var vacas = document.getElementById("vacas").value;
-            var fechaEntrada = document.getElementById("fechaEntrada").value;
+        function calcularDias(fecha) {
+            var fechaInicio = new Date(fecha);
+            var fechaActual = new Date();
+            return Math.floor((fechaActual - fechaInicio) / (1000 * 60 * 60 * 24));
+        }
+
+        function guardarDatos(btn, layerId) {
+            var vacas = btn.parentElement.querySelector("#vacas").value;
+            var fechaEntrada = btn.parentElement.querySelector("#fechaEntrada").value;
             if (!vacas || !fechaEntrada) {
                 alert("Por favor, ingresa todos los datos.");
                 return;
             }
 
-            var fechaActual = new Date();
-            var fechaInicio = new Date(fechaEntrada);
-            var diasPastoreo = Math.floor((fechaActual - fechaInicio) / (1000 * 60 * 60 * 24));
-
-            // Actualizar popup con la información ingresada
+            var diasPastoreo = calcularDias(fechaEntrada);
             var popupContent = `
                 <b>Potrero</b><br>
                 Vacas: ${vacas} <br>
                 Fecha Entrada: ${fechaEntrada} <br>
                 Días de Pastoreo: ${diasPastoreo} días <br>
-                <button onclick="marcarSalida(${diasPastoreo})">Marcar Salida</button>
+                <button onclick="marcarSalida(this, ${layerId})">Marcar Salida</button>
             `;
             drawnItems.getLayers().forEach(layer => {
-                if (layer._popup && layer._popup._content.includes("Nuevo Potrero")) {
+                if (layer._leaflet_id === layerId) {
                     layer.bindPopup(popupContent).openPopup();
                 }
             });
         }
 
-        // 5️⃣ Marcar salida y calcular días de reposo
-        function marcarSalida(diasPastoreo) {
+        function marcarSalida(btn, layerId) {
             var fechaSalida = new Date();
-            var fechaActual = new Date();
-            var diasReposo = Math.floor((fechaActual - fechaSalida) / (1000 * 60 * 60 * 24));
+            var diasReposo = 0;
 
-            // Actualizar popup con la nueva información
             var popupContent = `
                 <b>Potrero</b><br>
-                Días de Pastoreo: ${diasPastoreo} días <br>
                 Vacas: 0 (Vacío) <br>
                 Días de Reposo: ${diasReposo} días
             `;
             drawnItems.getLayers().forEach(layer => {
-                if (layer._popup && layer._popup._content.includes("Días de Pastoreo")) {
+                if (layer._leaflet_id === layerId) {
                     layer.bindPopup(popupContent).openPopup();
                 }
             });
         }
+
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            var file = event.target.files[0];
+            if (!file) {
+                alert("No se seleccionó ningún archivo.");
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(event) {
+                var text = event.target.result;
+                try {
+                    var kml = (new DOMParser()).parseFromString(text, 'text/xml');
+                    var geojson = toGeoJSON.kml(kml);
+                    L.geoJSON(geojson, {
+                        style: {color: 'blue'},
+                        onEachFeature: function(feature, layer) {
+                            drawnItems.addLayer(layer);
+                            addPopup(layer);
+                        }
+                    }).addTo(map);
+                } catch (error) {
+                    alert("Error al procesar el archivo KML/KMZ.");
+                }
+            };
+            reader.readAsText(file);
+        });
     </script>
 </body>
 </html>
