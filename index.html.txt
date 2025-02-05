@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Pastoreo</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+    <style>
+        #map { height: 600px; }
+    </style>
+</head>
+<body>
+
+    <h2>Gestión de Pastoreo con Leaflet</h2>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+    <script>
+        // 1️⃣ Inicializar mapa
+        var map = L.map('map').setView([-34.6, -58.4], 6); // Centrado en Argentina
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // 2️⃣ Control de dibujo
+        var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        var drawControl = new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: { polygon: true, polyline: false, rectangle: false, circle: false, marker: false }
+        });
+        map.addControl(drawControl);
+
+        // 3️⃣ Evento cuando se dibuja un potrero
+        map.on('draw:created', function (event) {
+            var layer = event.layer;
+            var popupContent = `
+                <b>Nuevo Potrero</b><br>
+                Vacas: <input type="number" id="vacas" min="1"><br>
+                Fecha Entrada: <input type="date" id="fechaEntrada"><br>
+                <button onclick="guardarDatos()">Guardar</button>
+            `;
+
+            layer.bindPopup(popupContent).openPopup();
+            drawnItems.addLayer(layer);
+            
+            // Guardar referencia del layer
+            layer._leaflet_id = new Date().getTime(); // ID único
+        });
+
+        // 4️⃣ Guardar datos en el popup
+        function guardarDatos() {
+            var vacas = document.getElementById("vacas").value;
+            var fechaEntrada = document.getElementById("fechaEntrada").value;
+            if (!vacas || !fechaEntrada) {
+                alert("Por favor, ingresa todos los datos.");
+                return;
+            }
+
+            var fechaActual = new Date();
+            var fechaInicio = new Date(fechaEntrada);
+            var diasPastoreo = Math.floor((fechaActual - fechaInicio) / (1000 * 60 * 60 * 24));
+
+            // Actualizar popup con la información ingresada
+            var popupContent = `
+                <b>Potrero</b><br>
+                Vacas: ${vacas} <br>
+                Fecha Entrada: ${fechaEntrada} <br>
+                Días de Pastoreo: ${diasPastoreo} días <br>
+                <button onclick="marcarSalida(${diasPastoreo})">Marcar Salida</button>
+            `;
+            drawnItems.getLayers().forEach(layer => {
+                if (layer._popup && layer._popup._content.includes("Nuevo Potrero")) {
+                    layer.bindPopup(popupContent).openPopup();
+                }
+            });
+        }
+
+        // 5️⃣ Marcar salida y calcular días de reposo
+        function marcarSalida(diasPastoreo) {
+            var fechaSalida = new Date();
+            var fechaActual = new Date();
+            var diasReposo = Math.floor((fechaActual - fechaSalida) / (1000 * 60 * 60 * 24));
+
+            // Actualizar popup con la nueva información
+            var popupContent = `
+                <b>Potrero</b><br>
+                Días de Pastoreo: ${diasPastoreo} días <br>
+                Vacas: 0 (Vacío) <br>
+                Días de Reposo: ${diasReposo} días
+            `;
+            drawnItems.getLayers().forEach(layer => {
+                if (layer._popup && layer._popup._content.includes("Días de Pastoreo")) {
+                    layer.bindPopup(popupContent).openPopup();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
