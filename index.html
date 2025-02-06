@@ -40,6 +40,27 @@
         });
         map.addControl(drawControl);
 
+        function handleFileSelect(evt) {
+            var file = evt.target.files[0];
+            if (!file) return;
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var parser = new DOMParser();
+                var kml = parser.parseFromString(e.target.result, 'text/xml');
+                var geojson = toGeoJSON.kml(kml);
+                var kmlLayer = L.geoJSON(geojson, {
+                    onEachFeature: function (feature, layer) {
+                        addPopup(layer);
+                    }
+                }).addTo(map);
+                drawnItems.addLayer(kmlLayer);
+            };
+            reader.readAsText(file);
+        }
+
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect, false);
+
         function addPopup(layer) {
             var popupContent = `
                 <b>Potrero</b><br>
@@ -61,75 +82,6 @@
             addPopup(layer);
         });
 
-        function calcularDias(fecha) {
-            var fechaInicio = new Date(fecha);
-            var fechaActual = new Date();
-            return Math.floor((fechaActual - fechaInicio) / (1000 * 60 * 60 * 24));
-        }
-
-        function guardarDatos(btn, layerId) {
-            var tipo = btn.parentElement.querySelector("#tipo").value;
-            var cantidad = btn.parentElement.querySelector("#cantidad").value;
-            var fechaEntrada = btn.parentElement.querySelector("#fechaEntrada").value;
-            if (!cantidad || !fechaEntrada) {
-                alert("Por favor, ingresa todos los datos.");
-                return;
-            }
-
-            var diasPastoreo = calcularDias(fechaEntrada);
-            var datos = { tipo, cantidad, fechaEntrada, diasPastoreo, fechaSalida: null };
-            localStorage.setItem(layerId, JSON.stringify(datos));
-
-            actualizarPopup(layerId);
-        }
-
-        function actualizarPopup(layerId) {
-            var datos = JSON.parse(localStorage.getItem(layerId));
-            if (!datos) return;
-
-            var popupContent = `
-                <b>Potrero</b><br>
-                Tipo: ${datos.tipo} <br>
-                Cantidad: ${datos.cantidad} <br>
-                Fecha Entrada: ${datos.fechaEntrada} <br>
-                Días de Pastoreo: ${datos.diasPastoreo} días <br>
-                <button onclick="marcarSalida(${layerId})">Marcar Salida</button>
-            `;
-
-            drawnItems.getLayers().forEach(layer => {
-                if (layer._leaflet_id === layerId) {
-                    layer.bindPopup(popupContent).openPopup();
-                }
-            });
-        }
-
-        function marcarSalida(layerId) {
-            var datos = JSON.parse(localStorage.getItem(layerId));
-            datos.fechaSalida = new Date().toISOString().split('T')[0];
-            localStorage.setItem(layerId, JSON.stringify(datos));
-            actualizarPopupSalida(layerId);
-        }
-
-        function actualizarPopupSalida(layerId) {
-            var datos = JSON.parse(localStorage.getItem(layerId));
-            if (!datos) return;
-
-            var diasReposo = calcularDias(datos.fechaSalida);
-
-            var popupContent = `
-                <b>Potrero</b><br>
-                Tipo: ${datos.tipo} <br>
-                Cantidad: 0 (Vacío) <br>
-                Días de Reposo: ${diasReposo} días
-            `;
-
-            drawnItems.getLayers().forEach(layer => {
-                if (layer._leaflet_id === layerId) {
-                    layer.bindPopup(popupContent).openPopup();
-                }
-            });
-        }
-
         function cargarDatosGuardados() {
             Object.keys(localStorage).forEach(layerId => {
                 var datos = JSON.parse(localStorage.getItem(layerId));
@@ -145,5 +97,3 @@
     </script>
 </body>
 </html>
-
-  
