@@ -43,7 +43,12 @@
         function addPopup(layer) {
             var popupContent = `
                 <b>Potrero</b><br>
-                Vacas: <input type="number" id="vacas" min="1"><br>
+                Tipo: <select id="tipo">
+                    <option value="Vacas">Vacas</option>
+                    <option value="Terneros">Terneros</option>
+                    <option value="Otros">Otros</option>
+                </select><br>
+                Cantidad: <input type="number" id="cantidad" min="1"><br>
                 Fecha Entrada: <input type="date" id="fechaEntrada"><br>
                 <button onclick="guardarDatos(this, ${layer._leaflet_id})">Guardar</button>
             `;
@@ -63,21 +68,34 @@
         }
 
         function guardarDatos(btn, layerId) {
-            var vacas = btn.parentElement.querySelector("#vacas").value;
+            var tipo = btn.parentElement.querySelector("#tipo").value;
+            var cantidad = btn.parentElement.querySelector("#cantidad").value;
             var fechaEntrada = btn.parentElement.querySelector("#fechaEntrada").value;
-            if (!vacas || !fechaEntrada) {
+            if (!cantidad || !fechaEntrada) {
                 alert("Por favor, ingresa todos los datos.");
                 return;
             }
 
             var diasPastoreo = calcularDias(fechaEntrada);
+            var datos = { tipo, cantidad, fechaEntrada, diasPastoreo, fechaSalida: null };
+            localStorage.setItem(layerId, JSON.stringify(datos));
+
+            actualizarPopup(layerId);
+        }
+
+        function actualizarPopup(layerId) {
+            var datos = JSON.parse(localStorage.getItem(layerId));
+            if (!datos) return;
+
             var popupContent = `
                 <b>Potrero</b><br>
-                Vacas: ${vacas} <br>
-                Fecha Entrada: ${fechaEntrada} <br>
-                Días de Pastoreo: ${diasPastoreo} días <br>
-                <button onclick="marcarSalida(this, ${layerId})">Marcar Salida</button>
+                Tipo: ${datos.tipo} <br>
+                Cantidad: ${datos.cantidad} <br>
+                Fecha Entrada: ${datos.fechaEntrada} <br>
+                Días de Pastoreo: ${datos.diasPastoreo} días <br>
+                <button onclick="marcarSalida(${layerId})">Marcar Salida</button>
             `;
+
             drawnItems.getLayers().forEach(layer => {
                 if (layer._leaflet_id === layerId) {
                     layer.bindPopup(popupContent).openPopup();
@@ -85,15 +103,26 @@
             });
         }
 
-        function marcarSalida(btn, layerId) {
-            var fechaSalida = new Date();
-            var diasReposo = 0;
+        function marcarSalida(layerId) {
+            var datos = JSON.parse(localStorage.getItem(layerId));
+            datos.fechaSalida = new Date().toISOString().split('T')[0];
+            localStorage.setItem(layerId, JSON.stringify(datos));
+            actualizarPopupSalida(layerId);
+        }
+
+        function actualizarPopupSalida(layerId) {
+            var datos = JSON.parse(localStorage.getItem(layerId));
+            if (!datos) return;
+
+            var diasReposo = calcularDias(datos.fechaSalida);
 
             var popupContent = `
                 <b>Potrero</b><br>
-                Vacas: 0 (Vacío) <br>
+                Tipo: ${datos.tipo} <br>
+                Cantidad: 0 (Vacío) <br>
                 Días de Reposo: ${diasReposo} días
             `;
+
             drawnItems.getLayers().forEach(layer => {
                 if (layer._leaflet_id === layerId) {
                     layer.bindPopup(popupContent).openPopup();
@@ -101,32 +130,20 @@
             });
         }
 
-        document.getElementById('fileInput').addEventListener('change', function(event) {
-            var file = event.target.files[0];
-            if (!file) {
-                alert("No se seleccionó ningún archivo.");
-                return;
-            }
-            var reader = new FileReader();
-            reader.onload = function(event) {
-                var text = event.target.result;
-                try {
-                    var kml = (new DOMParser()).parseFromString(text, 'text/xml');
-                    var geojson = toGeoJSON.kml(kml);
-                    L.geoJSON(geojson, {
-                        style: {color: 'blue'},
-                        onEachFeature: function(feature, layer) {
-                            drawnItems.addLayer(layer);
-                            addPopup(layer);
-                        }
-                    }).addTo(map);
-                } catch (error) {
-                    alert("Error al procesar el archivo KML/KMZ.");
+        function cargarDatosGuardados() {
+            Object.keys(localStorage).forEach(layerId => {
+                var datos = JSON.parse(localStorage.getItem(layerId));
+                if (datos) {
+                    var layer = L.polygon([]);
+                    drawnItems.addLayer(layer);
+                    actualizarPopup(layerId);
                 }
-            };
-            reader.readAsText(file);
-        });
+            });
+        }
+
+        cargarDatosGuardados();
     </script>
 </body>
 </html>
+
   
